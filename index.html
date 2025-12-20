@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Photo Selector</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="toolbar__left">
+        <button id="openFolderBtn">Open Folder</button>
+        <button id="prevBtn" disabled>Prev</button>
+        <button id="nextBtn" disabled>Next</button>
+        <button id="playBtn" disabled>Play</button>
+      </div>
+      <div class="toolbar__right">
+        <span id="fileInfo">No folder selected</span>
+        <span id="selectionCount">Selected: 0</span>
+        <button id="toggleSelectBtn" disabled>Select</button>
+        <button id="copyBtn" disabled>Copy Selected</button>
+        <button id="moveBtn" disabled>Move Selected</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <div id="emptyState" class="empty">Pick a folder to start the slideshow.</div>
+      <img id="photo" alt="Selected" />
+    </main>
+
+    <footer class="status" id="status"></footer>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

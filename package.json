@@ -1,0 +1,12 @@
+{
+  "name": "photo-selector",
+  "version": "0.1.0",
+  "description": "Desktop photo selector slideshow",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^39.2.7"
+  }
+}
