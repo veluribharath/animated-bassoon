@@ -236,23 +236,90 @@ function renderImage() {
 function renderGrid() {
   gridView.innerHTML = '';
   
-  images.forEach((item, index) => {
-    const gridItem = document.createElement('div');
-    gridItem.className = 'grid-item';
-    if (selected.has(item.path)) gridItem.classList.add('selected');
-    if (index === currentIndex) gridItem.classList.add('current');
+  // Show loading indicator
+  setStatus(`Loading ${images.length} thumbnails...`);
+  
+  // Use requestAnimationFrame to batch DOM updates and prevent freezing
+  let batchIndex = 0;
+  const batchSize = 20; // Load 20 thumbnails at a time
+  
+  function renderBatch() {
+    const endIndex = Math.min(batchIndex + batchSize, images.length);
     
-    const img = document.createElement('img');
-    img.src = item.url;
-    img.loading = 'lazy';
+    for (let index = batchIndex; index < endIndex; index++) {
+      const item = images[index];
+      const gridItem = document.createElement('div');
+      gridItem.className = 'grid-item';
+      if (selected.has(item.path)) gridItem.classList.add('selected');
+      if (index === currentIndex) gridItem.classList.add('current');
+      
+      const img = document.createElement('img');
+      // Don't load image immediately - wait for intersection observer
+      img.dataset.src = item.url;
+      img.alt = item.name;
+      img.loading = 'lazy';
+      img.className = 'grid-thumbnail';
+      
+      // Add placeholder background
+      gridItem.style.backgroundColor = '#1f2937';
+      
+      gridItem.appendChild(img);
+      gridItem.addEventListener('click', () => {
+        currentIndex = index;
+        toggleView();
+      });
+      
+      gridView.appendChild(gridItem);
+    }
     
-    gridItem.appendChild(img);
-    gridItem.addEventListener('click', () => {
-      currentIndex = index;
-      toggleView();
+    batchIndex = endIndex;
+    
+    if (batchIndex < images.length) {
+      // Continue with next batch
+      requestAnimationFrame(renderBatch);
+      setStatus(`Loading thumbnails... ${batchIndex}/${images.length}`);
+    } else {
+      // All batches done, now lazy load images using IntersectionObserver
+      setStatus(`Grid view ready (${images.length} images)`);
+      lazyLoadGridImages();
+    }
+  }
+  
+  // Start rendering batches
+  requestAnimationFrame(renderBatch);
+}
+
+// Lazy load grid images using IntersectionObserver
+let gridImageObserver = null;
+
+function lazyLoadGridImages() {
+  // Disconnect previous observer if it exists
+  if (gridImageObserver) {
+    gridImageObserver.disconnect();
+  }
+  
+  gridImageObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          delete img.dataset.src;
+          gridImageObserver.unobserve(img);
+        }
+      }
     });
-    
-    gridView.appendChild(gridItem);
+  }, {
+    rootMargin: '50px', // Start loading slightly before entering viewport
+    threshold: 0.01
+  });
+  
+  // Observe all grid thumbnails
+  const thumbnails = gridView.querySelectorAll('.grid-thumbnail');
+  thumbnails.forEach(img => {
+    if (img.dataset.src) {
+      gridImageObserver.observe(img);
+    }
   });
 }
 
@@ -269,6 +336,12 @@ function toggleView() {
       togglePlay(); // Stop slideshow in grid view
     }
   } else {
+    // Cleanup grid view
+    if (gridImageObserver) {
+      gridImageObserver.disconnect();
+      gridImageObserver = null;
+    }
+    
     photoContainer.style.display = 'flex';
     gridView.classList.remove('active');
     viewToggleBtn.textContent = 'Grid View';
