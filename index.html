@@ -13,22 +13,78 @@
         <button id="prevBtn" disabled>Prev</button>
         <button id="nextBtn" disabled>Next</button>
         <button id="playBtn" disabled>Play</button>
+        <button id="viewToggleBtn" disabled>Grid View</button>
+      </div>
+      <div class="toolbar__center">
+        <button id="zoomOutBtn" disabled title="Zoom Out (-)">-</button>
+        <span id="zoomLevel">100%</span>
+        <button id="zoomInBtn" disabled title="Zoom In (+)">+</button>
+        <button id="zoomResetBtn" disabled title="Reset Zoom (0)">Reset</button>
+        <button id="rotateLeftBtn" disabled title="Rotate Left ([)">⟲</button>
+        <button id="rotateRightBtn" disabled title="Rotate Right (])">⟳</button>
+        <button id="fullscreenBtn" disabled title="Fullscreen (F)">⛶</button>
       </div>
       <div class="toolbar__right">
+        <label class="speed-control">
+          <span>Speed:</span>
+          <input type="range" id="speedSlider" min="500" max="5000" step="100" value="2500" disabled />
+          <span id="speedValue">2.5s</span>
+        </label>
+        <select id="sortSelect" disabled>
+          <option value="name">Sort: Name</option>
+          <option value="date">Sort: Date</option>
+          <option value="size">Sort: Size</option>
+        </select>
         <span id="fileInfo">No folder selected</span>
         <span id="selectionCount">Selected: 0</span>
         <button id="toggleSelectBtn" disabled>Select</button>
+        <button id="selectAllBtn" disabled>Select All</button>
+        <button id="clearSelectionBtn" disabled>Clear</button>
+        <button id="invertSelectionBtn" disabled>Invert</button>
         <button id="copyBtn" disabled>Copy Selected</button>
         <button id="moveBtn" disabled>Move Selected</button>
+        <button id="deleteBtn" disabled>Delete</button>
+        <button id="helpBtn" title="Help (?)">?</button>
       </div>
     </header>
 
-    <main class="stage">
-      <div id="emptyState" class="empty">Pick a folder to start the slideshow.</div>
-      <img id="photo" alt="Selected" />
+    <main class="stage" id="stage">
+      <div id="emptyState" class="empty">Pick a folder to start the slideshow.<br><small>Or drag & drop a folder here</small></div>
+      <div id="photoContainer" class="photo-container">
+        <img id="photo" alt="Selected" draggable="false" />
+      </div>
+      <div id="gridView" class="grid-view"></div>
+      <div id="metadataPanel" class="metadata-panel">
+        <h3>Image Info</h3>
+        <div id="metadataContent"></div>
+      </div>
     </main>
 
     <footer class="status" id="status"></footer>
+
+    <!-- Help Overlay -->
+    <div id="helpOverlay" class="help-overlay">
+      <div class="help-content">
+        <h2>Keyboard Shortcuts</h2>
+        <div class="shortcuts-grid">
+          <div><kbd>←</kbd><kbd>→</kbd></div><div>Previous/Next Image</div>
+          <div><kbd>Space</kbd></div><div>Play/Pause Slideshow</div>
+          <div><kbd>S</kbd></div><div>Select/Unselect Current</div>
+          <div><kbd>A</kbd></div><div>Select All</div>
+          <div><kbd>C</kbd></div><div>Clear Selection</div>
+          <div><kbd>I</kbd></div><div>Invert Selection</div>
+          <div><kbd>Delete</kbd></div><div>Delete Current/Selected</div>
+          <div><kbd>F</kbd></div><div>Toggle Fullscreen</div>
+          <div><kbd>G</kbd></div><div>Toggle Grid View</div>
+          <div><kbd>[</kbd><kbd>]</kbd></div><div>Rotate Left/Right</div>
+          <div><kbd>+</kbd><kbd>-</kbd></div><div>Zoom In/Out</div>
+          <div><kbd>0</kbd></div><div>Reset Zoom</kbd>
+          <div><kbd>M</kbd></div><div>Toggle Metadata</div>
+          <div><kbd>?</kbd></div><div>Show This Help</div>
+        </div>
+        <p>Click anywhere or press <kbd>Esc</kbd> to close</p>
+      </div>
+    </div>
 
     <script src="renderer.js"></script>
   </body>
