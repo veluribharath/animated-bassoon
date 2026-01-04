@@ -35,6 +35,9 @@
           <option value="date">Sort: Date</option>
           <option value="size">Sort: Size</option>
         </select>
+        <button id="findGroupsBtn" disabled title="Find Similar Photos">Find Groups</button>
+        <button id="groupToggleBtn" disabled title="Toggle Group View (Shift+G)">Group View</button>
+        <span id="groupCount">Groups: 0</span>
         <span id="fileInfo">No folder selected</span>
         <span id="selectionCount">Selected: 0</span>
         <button id="toggleSelectBtn" disabled>Select</button>
@@ -76,6 +79,7 @@
           <div><kbd>Delete</kbd></div><div>Delete Current/Selected</div>
           <div><kbd>F</kbd></div><div>Toggle Fullscreen</div>
           <div><kbd>G</kbd></div><div>Toggle Grid View</div>
+          <div><kbd>Shift</kbd>+<kbd>G</kbd></div><div>Toggle Group View</div>
           <div><kbd>[</kbd><kbd>]</kbd></div><div>Rotate Left/Right</div>
           <div><kbd>+</kbd><kbd>-</kbd></div><div>Zoom In/Out</div>
           <div><kbd>0</kbd></div><div>Reset Zoom</kbd>
@@ -83,6 +87,23 @@
           <div><kbd>?</kbd></div><div>Show This Help</div>
         </div>
         <p>Click anywhere or press <kbd>Esc</kbd> to close</p>
+      </div>
+    </div>
+
+    <!-- Group Comparison Overlay -->
+    <div id="groupCompareOverlay" class="group-compare-overlay">
+      <div class="compare-content">
+        <div class="compare-header">
+          <h2>Select Best Photo</h2>
+          <button id="compareCloseBtn" class="close-btn">✕</button>
+        </div>
+        <div class="compare-grid" id="compareGrid">
+          <!-- Dynamically populated with group members -->
+        </div>
+        <div class="compare-actions">
+          <button id="deleteNonSelectedBtn" class="danger-btn">Delete Non-Selected</button>
+          <button id="keepAllBtn" class="secondary-btn">Keep All</button>
+        </div>
       </div>
     </div>
 

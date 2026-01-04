@@ -37,6 +37,15 @@ const metadataPanel = document.getElementById('metadataPanel');
 const metadataContent = document.getElementById('metadataContent');
 const helpOverlay = document.getElementById('helpOverlay');
 
+const findGroupsBtn = document.getElementById('findGroupsBtn');
+const groupToggleBtn = document.getElementById('groupToggleBtn');
+const groupCount = document.getElementById('groupCount');
+const groupCompareOverlay = document.getElementById('groupCompareOverlay');
+const compareCloseBtn = document.getElementById('compareCloseBtn');
+const compareGrid = document.getElementById('compareGrid');
+const deleteNonSelectedBtn = document.getElementById('deleteNonSelectedBtn');
+const keepAllBtn = document.getElementById('keepAllBtn');
+
 // Settings key for localStorage
 const SETTINGS_KEY = 'photoSelectorSettings';
 
@@ -53,17 +62,30 @@ function loadSettings() {
   return {
     slideShowSpeed: 2500,
     sortBy: 'name',
-    lastFolder: null
+    lastFolder: null,
+    groupingEnabled: false,
+    groupingSettings: {
+      timeThresholdSeconds: 10,
+      similarityThreshold: 0.9,
+      minGroupSize: 2
+    }
   };
 }
 
 // Save settings to localStorage
 function saveSettings() {
   try {
+    const currentSettings = loadSettings();
     const settings = {
       slideShowSpeed,
       sortBy: sortSelect.value,
-      lastFolder: images.length > 0 ? images[0].path.split('/').slice(0, -1).join('/') : null
+      lastFolder: images.length > 0 ? images[0].path.split('/').slice(0, -1).join('/') : null,
+      groupingEnabled: currentSettings.groupingEnabled || false,
+      groupingSettings: currentSettings.groupingSettings || {
+        timeThresholdSeconds: 10,
+        similarityThreshold: 0.9,
+        minGroupSize: 2
+      }
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (e) {
@@ -95,6 +117,11 @@ let startY = 0;
 let isGridView = false;
 let isMetadataVisible = false;
 
+// Group state
+let photoGroups = new Map();  // Map<groupId, GroupInfo>
+let isGroupingMode = false;   // Toggle for group review mode
+let expandedGroupId = null;   // Currently expanded group for comparison
+
 // Helper Functions
 function setStatus(message) {
   statusEl.textContent = message || '';
@@ -113,16 +140,20 @@ function updateControls() {
   copyBtn.disabled = selected.size === 0;
   moveBtn.disabled = selected.size === 0;
   deleteBtn.disabled = !hasImages && selected.size === 0;
-  
+
   zoomInBtn.disabled = !hasImages;
   zoomOutBtn.disabled = !hasImages;
   zoomResetBtn.disabled = !hasImages;
   rotateLeftBtn.disabled = !hasImages;
   rotateRightBtn.disabled = !hasImages;
   fullscreenBtn.disabled = !hasImages;
-  
+
   speedSlider.disabled = !hasImages;
   sortSelect.disabled = !hasImages;
+
+  // Group controls
+  findGroupsBtn.disabled = !hasImages;
+  groupToggleBtn.disabled = photoGroups.size === 0;
 }
 
 function updateSelectionUI() {
@@ -595,6 +626,413 @@ function sortImages(sortBy) {
   saveSettings();
 }
 
+// ====================
+// Photo Grouping Functions
+// ====================
+
+// Find and group similar photos
+async function findGroupsWithProgress() {
+  if (images.length === 0) {
+    setStatus('No images to group');
+    return;
+  }
+
+  setStatus('Analyzing images for grouping...');
+  const settings = loadSettings();
+  const groupingSettings = settings.groupingSettings || {
+    timeThresholdSeconds: 10,
+    similarityThreshold: 0.9,
+    minGroupSize: 2
+  };
+
+  try {
+    const result = await window.photoApi.groupPhotos({
+      images,
+      settings: groupingSettings
+    });
+
+    if (!result.ok) {
+      setStatus(`Grouping failed: ${result.error}`);
+      return;
+    }
+
+    // Update images with enriched data
+    images = result.enrichedImages;
+
+    // Update groups map
+    photoGroups.clear();
+    result.groups.forEach(group => {
+      photoGroups.set(group.id, {
+        id: group.id,
+        members: group.members,
+        leaderId: group.leaderId,
+        userOverrideId: null,
+        collapsed: true
+      });
+    });
+
+    // Update UI
+    groupCount.textContent = `Groups: ${photoGroups.size}`;
+    setStatus(`Found ${photoGroups.size} groups of similar photos`);
+
+    // Auto-switch to group view if groups found
+    if (photoGroups.size > 0 && !isGroupingMode) {
+      toggleGroupingMode();
+    }
+  } catch (error) {
+    console.error('Grouping error:', error);
+    setStatus(`Grouping failed: ${error.message}`);
+  }
+}
+
+// Toggle grouping mode
+function toggleGroupingMode() {
+  isGroupingMode = !isGroupingMode;
+
+  if (isGroupingMode) {
+    groupToggleBtn.textContent = 'Normal View';
+    if (isGridView) {
+      renderGridWithGroups();
+    } else {
+      // Switch to grid view for grouping
+      toggleView();
+    }
+  } else {
+    groupToggleBtn.textContent = 'Group View';
+    if (isGridView) {
+      renderGrid();
+    }
+  }
+}
+
+// Render grid with group containers
+function renderGridWithGroups() {
+  if (!isGroupingMode || photoGroups.size === 0) {
+    renderGrid();
+    return;
+  }
+
+  gridView.innerHTML = '';
+  setStatus(`Rendering ${photoGroups.size} groups...`);
+
+  // Render groups
+  photoGroups.forEach(group => {
+    const groupContainer = createGroupContainer(group);
+    gridView.appendChild(groupContainer);
+  });
+
+  // Render ungrouped images
+  const ungroupedImages = images.filter(img => !img.groupId);
+  ungroupedImages.forEach(img => {
+    const gridItem = createStandardGridItem(img);
+    gridView.appendChild(gridItem);
+  });
+
+  // Apply lazy loading
+  lazyLoadGridImages();
+  setStatus(`Group view ready (${photoGroups.size} groups, ${ungroupedImages.length} ungrouped)`);
+}
+
+// Create group container element
+function createGroupContainer(group) {
+  const container = document.createElement('div');
+  container.className = 'group-container';
+  container.dataset.groupId = group.id;
+
+  // Group header
+  const header = document.createElement('div');
+  header.className = 'group-header';
+
+  const badge = document.createElement('span');
+  badge.className = 'group-badge';
+  badge.textContent = `${group.members.length} similar photos`;
+
+  const expandBtn = document.createElement('button');
+  expandBtn.className = 'group-expand-btn';
+  expandBtn.textContent = group.collapsed ? 'Expand' : 'Collapse';
+  expandBtn.addEventListener('click', () => toggleGroupExpand(group.id));
+
+  const compareBtn = document.createElement('button');
+  compareBtn.className = 'group-expand-btn';
+  compareBtn.textContent = 'Compare & Choose';
+  compareBtn.style.marginLeft = '8px';
+  compareBtn.addEventListener('click', () => showGroupComparison(group.id));
+
+  header.appendChild(badge);
+  header.appendChild(document.createTextNode(' '));
+  header.appendChild(compareBtn);
+  header.appendChild(expandBtn);
+  container.appendChild(header);
+
+  // Leader thumbnail
+  const leaderPath = group.userOverrideId || group.leaderId;
+  const leaderImg = images.find(img => img.path === leaderPath);
+  if (leaderImg) {
+    const leaderThumbnail = createGroupThumbnail(leaderImg, true, group.id);
+    container.appendChild(leaderThumbnail);
+  }
+
+  // Expanded members
+  if (!group.collapsed) {
+    const membersContainer = document.createElement('div');
+    membersContainer.className = 'group-members';
+
+    group.members
+      .filter(path => path !== leaderPath)
+      .forEach(path => {
+        const img = images.find(i => i.path === path);
+        if (img) {
+          const thumbnail = createGroupThumbnail(img, false, group.id);
+          membersContainer.appendChild(thumbnail);
+        }
+      });
+
+    container.appendChild(membersContainer);
+  }
+
+  return container;
+}
+
+// Create thumbnail for group member
+function createGroupThumbnail(img, isLeader, groupId) {
+  const gridItem = document.createElement('div');
+  gridItem.className = `grid-item ${isLeader ? 'group-leader' : 'group-member'}`;
+  gridItem.dataset.groupId = groupId;
+  gridItem.dataset.path = img.path;
+
+  const thumbnail = document.createElement('img');
+  thumbnail.dataset.src = img.url;
+  thumbnail.alt = img.name;
+  thumbnail.loading = 'lazy';
+  thumbnail.className = 'grid-thumbnail';
+
+  gridItem.appendChild(thumbnail);
+
+  // Leader badge
+  if (isLeader) {
+    const badge = document.createElement('div');
+    badge.className = 'leader-badge';
+    badge.textContent = 'BEST';
+    gridItem.appendChild(badge);
+  }
+
+  // Click to select as leader (if not already leader)
+  if (!isLeader) {
+    gridItem.addEventListener('click', () => {
+      selectAsGroupLeader(groupId, img.path);
+    });
+  }
+
+  return gridItem;
+}
+
+// Create standard grid item (for ungrouped images)
+function createStandardGridItem(img) {
+  const gridItem = document.createElement('div');
+  gridItem.className = 'grid-item';
+  if (selected.has(img.path)) gridItem.classList.add('selected');
+
+  const thumbnail = document.createElement('img');
+  thumbnail.dataset.src = img.url;
+  thumbnail.alt = img.name;
+  thumbnail.loading = 'lazy';
+  thumbnail.className = 'grid-thumbnail';
+
+  gridItem.appendChild(thumbnail);
+
+  gridItem.addEventListener('click', () => {
+    const index = images.findIndex(i => i.path === img.path);
+    if (index !== -1) {
+      currentIndex = index;
+      toggleView();
+    }
+  });
+
+  return gridItem;
+}
+
+// Toggle group expand/collapse
+function toggleGroupExpand(groupId) {
+  const group = photoGroups.get(groupId);
+  if (!group) return;
+
+  group.collapsed = !group.collapsed;
+  photoGroups.set(groupId, group);
+
+  renderGridWithGroups();
+}
+
+// Show group comparison overlay
+function showGroupComparison(groupId) {
+  const group = photoGroups.get(groupId);
+  if (!group) return;
+
+  expandedGroupId = groupId;
+  compareGrid.innerHTML = '';
+
+  const leaderPath = group.userOverrideId || group.leaderId;
+
+  group.members.forEach(path => {
+    const img = images.find(i => i.path === path);
+    if (!img) return;
+
+    const isLeader = path === leaderPath;
+
+    const card = document.createElement('div');
+    card.className = `compare-card ${isLeader ? 'selected' : ''}`;
+    card.dataset.path = path;
+
+    const imgEl = document.createElement('img');
+    imgEl.src = img.url;
+    imgEl.alt = img.name;
+
+    const info = document.createElement('div');
+    info.className = 'compare-info';
+
+    const fileName = document.createElement('p');
+    fileName.textContent = img.name;
+
+    const meta = document.createElement('p');
+    meta.className = 'compare-meta';
+    const dimensions = img.dimensions ? `${img.dimensions.width}×${img.dimensions.height}` : 'N/A';
+    const fileSize = formatFileSize(img.size);
+    meta.textContent = `${dimensions} • ${fileSize}`;
+
+    const quality = document.createElement('p');
+    quality.className = 'compare-quality';
+    quality.textContent = `Quality Score: ${img.qualityScore || 0}/100`;
+
+    info.appendChild(fileName);
+    info.appendChild(meta);
+    info.appendChild(quality);
+
+    const selectBtn = document.createElement('button');
+    selectBtn.className = 'select-best-btn';
+    selectBtn.textContent = isLeader ? '✓ Selected' : 'Select as Best';
+    selectBtn.dataset.path = path;
+
+    selectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectAsGroupLeader(groupId, path);
+      updateComparisonUI(groupId);
+    });
+
+    card.appendChild(imgEl);
+    card.appendChild(info);
+    card.appendChild(selectBtn);
+
+    compareGrid.appendChild(card);
+  });
+
+  groupCompareOverlay.classList.add('active');
+}
+
+// Update comparison overlay UI after leader change
+function updateComparisonUI(groupId) {
+  const group = photoGroups.get(groupId);
+  if (!group) return;
+
+  const leaderPath = group.userOverrideId || group.leaderId;
+
+  document.querySelectorAll('.compare-card').forEach(card => {
+    const cardPath = card.dataset.path;
+    const isLeader = cardPath === leaderPath;
+
+    if (isLeader) {
+      card.classList.add('selected');
+      const btn = card.querySelector('.select-best-btn');
+      if (btn) btn.textContent = '✓ Selected';
+    } else {
+      card.classList.remove('selected');
+      const btn = card.querySelector('.select-best-btn');
+      if (btn) btn.textContent = 'Select as Best';
+    }
+  });
+}
+
+// Select a photo as group leader
+function selectAsGroupLeader(groupId, newLeaderPath) {
+  const group = photoGroups.get(groupId);
+  if (!group) return;
+
+  group.userOverrideId = newLeaderPath;
+  photoGroups.set(groupId, group);
+
+  // Update images array
+  group.members.forEach(path => {
+    const img = images.find(i => i.path === path);
+    if (img) {
+      img.isGroupLeader = (path === newLeaderPath);
+    }
+  });
+
+  // Re-render if in group view
+  if (isGroupingMode && isGridView) {
+    renderGridWithGroups();
+  }
+
+  setStatus(`Updated group leader`);
+}
+
+// Delete non-selected photos from current group
+async function deleteGroupRejects() {
+  if (!expandedGroupId) return;
+
+  const group = photoGroups.get(expandedGroupId);
+  if (!group) return;
+
+  const keepPath = group.userOverrideId || group.leaderId;
+  const deletePaths = group.members.filter(path => path !== keepPath);
+
+  if (deletePaths.length === 0) {
+    setStatus('No photos to delete');
+    return;
+  }
+
+  if (!confirm(`Delete ${deletePaths.length} photo(s) from this group?`)) {
+    return;
+  }
+
+  setStatus(`Deleting ${deletePaths.length} photo(s)...`);
+
+  try {
+    const result = await window.photoApi.deleteGroupRejects({
+      keepPath,
+      deletePaths
+    });
+
+    if (result.ok) {
+      // Remove deleted images from images array
+      images = images.filter(img => !deletePaths.includes(img.path));
+
+      // Update group
+      group.members = [keepPath];
+      photoGroups.set(expandedGroupId, group);
+
+      // If group only has 1 member, remove it
+      if (group.members.length < 2) {
+        photoGroups.delete(expandedGroupId);
+      }
+
+      // Update UI
+      groupCount.textContent = `Groups: ${photoGroups.size}`;
+      groupCompareOverlay.classList.remove('active');
+      expandedGroupId = null;
+
+      if (isGroupingMode && isGridView) {
+        renderGridWithGroups();
+      }
+
+      setStatus(`Deleted ${result.deleted} photo(s)`);
+    } else {
+      setStatus(`Delete failed: ${result.error}`);
+    }
+  } catch (error) {
+    console.error('Delete error:', error);
+    setStatus(`Delete failed: ${error.message}`);
+  }
+}
+
 // Pan functionality
 photoContainer.addEventListener('mousedown', (e) => {
   if (scale <= 1) return;
@@ -678,6 +1116,29 @@ rotateLeftBtn.addEventListener('click', rotateLeft);
 rotateRightBtn.addEventListener('click', rotateRight);
 fullscreenBtn.addEventListener('click', toggleFullscreen);
 
+// Group controls
+findGroupsBtn.addEventListener('click', findGroupsWithProgress);
+groupToggleBtn.addEventListener('click', toggleGroupingMode);
+
+// Comparison overlay
+compareCloseBtn.addEventListener('click', () => {
+  groupCompareOverlay.classList.remove('active');
+  expandedGroupId = null;
+});
+deleteNonSelectedBtn.addEventListener('click', deleteGroupRejects);
+keepAllBtn.addEventListener('click', () => {
+  groupCompareOverlay.classList.remove('active');
+  expandedGroupId = null;
+});
+
+// Close comparison overlay when clicking outside
+groupCompareOverlay.addEventListener('click', (e) => {
+  if (e.target === groupCompareOverlay) {
+    groupCompareOverlay.classList.remove('active');
+    expandedGroupId = null;
+  }
+});
+
 speedSlider.addEventListener('input', updateSlideShowSpeed);
 sortSelect.addEventListener('change', (e) => sortImages(e.target.value));
 
@@ -730,7 +1191,11 @@ window.addEventListener('keydown', (event) => {
       break;
     case 'g':
     case 'G':
-      toggleView();
+      if (event.shiftKey && photoGroups.size > 0) {
+        toggleGroupingMode();
+      } else {
+        toggleView();
+      }
       break;
     case '[':
       rotateLeft();
@@ -757,7 +1222,10 @@ window.addEventListener('keydown', (event) => {
       toggleHelp();
       break;
     case 'Escape':
-      if (helpOverlay.classList.contains('active')) {
+      if (groupCompareOverlay.classList.contains('active')) {
+        groupCompareOverlay.classList.remove('active');
+        expandedGroupId = null;
+      } else if (helpOverlay.classList.contains('active')) {
         toggleHelp();
       } else if (document.fullscreenElement) {
         toggleFullscreen();

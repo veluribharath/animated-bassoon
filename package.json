@@ -10,6 +10,7 @@
     "electron": "^39.2.7"
   },
   "dependencies": {
-    "exif-parser": "^0.1.12"
+    "exif-parser": "^0.1.12",
+    "sharp": "^0.33.0"
   }
 }

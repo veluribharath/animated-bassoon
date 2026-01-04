@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('photoApi', {
   processFiles: (payload) => ipcRenderer.invoke('process-files', payload),
   deleteFiles: (files) => ipcRenderer.invoke('delete-files', files),
   getMetadata: (filePath) => ipcRenderer.invoke('get-metadata', filePath),
-  validateFolder: (folderPath) => ipcRenderer.invoke('validate-folder', folderPath)
+  validateFolder: (folderPath) => ipcRenderer.invoke('validate-folder', folderPath),
+  groupPhotos: (payload) => ipcRenderer.invoke('group-photos', payload),
+  deleteGroupRejects: (payload) => ipcRenderer.invoke('delete-group-rejects', payload)
 });
